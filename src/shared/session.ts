@@ -925,6 +925,9 @@ export function isReasoningEffort(value: unknown): value is ReasoningEffort {
 }
 
 export interface AgentInfo {
+  /** The verified project-local Agency skill selected by the prime at spawn.
+   * The opening prompt separately verifies this exact digest before delivery. */
+  agencyProfile?: { name: string; skillId: string; path: string; sha256: string };
   /** Broker owner projection. IDs such as worker-1 are local to this incarnation. */
   runId?: string;
   /** Immutable broker allocation identity; survives a sleeping family's new incarnation. */

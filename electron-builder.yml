@@ -1,5 +1,5 @@
-appId: com.chatonsteroids.app
-productName: Chat On Steroids
+appId: com.tsahn.chatonsteroids.agency
+productName: Chat On Steroids Agency
 copyright: MIT licensed
 
 directories:
@@ -127,7 +127,7 @@ mac:
   # nothing Gatekeeper will vouch for — and verifies the result.
   identity: null
   notarize: false
-  artifactName: Chat-On-Steroids-macOS-${arch}.${ext}
+  artifactName: Chat-On-Steroids-Agency-macOS-${arch}.${ext}
   files:
     - from: resources/packaging/native/darwin/${arch}/node_modules
       to: node_modules

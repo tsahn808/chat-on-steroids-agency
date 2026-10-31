@@ -41,6 +41,7 @@ import { SandboxError, isAbsoluteVirtualPath, isNativeWindowsPath, resolvePath, 
 import { currentWorkspace, primeWorkspace } from '../workspace.js';
 import { getSessionProject } from '../projects.js';
 import { acceptAgentMutation, measureSleepingWorkers, spawnAgentWorkers } from '../agent-admission.js';
+import { bindAgencyProfile } from '../agency-profile.js';
 import { checkpointBeforePatch } from '../checkpoints/index.js';
 import type { Capabilities, Root } from '../../shared/types.js';
 import { commandHasSameArguments, evaluateCommandAllowlist } from '../../shared/command-allowlist.js';
@@ -1299,7 +1300,12 @@ function registerAgentsTool(reg: SurfaceRegistrar): void {
                 .optional()
                 .describe(
                   'Only for an effort the user asked for; app settings supply the default. Selects reasoning only, never a model.'
-                )
+                ),
+              agency_profile: z.string().min(2).max(80).optional().describe(
+                'Exact installed project Agency catalog skill directory (e.g. engineering-code-reviewer). ' +
+                'The app verifies its source and SHA-256, loads the actual skill natively into the worker, ' +
+                'and refuses launch if the skill is missing or changes before bootstrap.'
+              )
             }).strict()
           )
           .min(1)
@@ -1385,15 +1391,30 @@ function registerAgentsTool(reg: SurfaceRegistrar): void {
           if (await managedWorkerIsolationRequired(spawnCaller) && !managedWorkerAllocationIdentity(spawnCaller)) {
             return fail('WORKTREE_OWNER_UNAVAILABLE: a retired worker cannot create a prime run after its isolated checkout owner was lost.');
           }
-          const { created, becamePrime, runId, defaultNotes, isolationNotes } = await spawnAgentWorkers({
-            workers: input.workers,
-            context: input.context ?? null,
-            caller: spawnCaller
-          }, async () => {
+          const sourceWorkspace = async () => {
             const sessionId = currentCall()?.caller.sessionId;
             return (sessionId ? await getSessionProject(sessionId) : null) ??
               primeWorkspace(currentCaller().conversationId) ?? currentWorkspace();
-          }, () => !reg.ctx.readOnly && reg.caps.command && reg.caps.create && reg.caps.edit);
+          };
+          // Only the original installed project catalog can select an Agency worker.
+          // Resolve and fingerprint every requested role before mutating worker topology.
+          const workers = await Promise.all(input.workers.map(async (worker) => {
+            if (!worker.agency_profile) return worker;
+            const source = await sourceWorkspace();
+            if (!source) throw new Error('AGENCY_PROFILE_NO_PROJECT: select an approved project with installed Agency skills.');
+            const binding = await bindAgencyProfile(worker.agency_profile, source.real);
+            const { agency_profile: _requested, ...rest } = worker;
+            return {
+              ...rest,
+              agencyDirective: `/${binding.skillId}\n<!-- cos-agency:${binding.skillId}:${binding.sha256} -->`,
+              agencyProfile: binding
+            };
+          }));
+          const { created, becamePrime, runId, defaultNotes, isolationNotes } = await spawnAgentWorkers({
+            workers,
+            context: input.context ?? null,
+            caller: spawnCaller
+          }, sourceWorkspace, () => !reg.ctx.readOnly && reg.caps.command && reg.caps.create && reg.caps.edit);
           if (currentCall()) currentCall()!.caller.runId = runId;
           // Browser tabs are a publication side effect, never part of planning. They become
           // visible only after the exact broker revision above is durable.
@@ -1428,7 +1449,8 @@ function registerAgentsTool(reg: SurfaceRegistrar): void {
               run_id: runId,
               self: PRIME_ID,
               became_prime: becamePrime,
-              workers: created.map((info) => ({ id: info.id, label: info.label, state: info.state, model: info.model, reasoning_effort: info.reasoningEffort }))
+              workers: created.map((info) => ({ id: info.id, label: info.label, state: info.state, model: info.model,
+                reasoning_effort: info.reasoningEffort, agency_profile: info.agencyProfile ?? null }))
             }
           };
         }
@@ -1662,6 +1684,7 @@ function registerAgentsTool(reg: SurfaceRegistrar): void {
               id: info.id,
               role: info.role,
               label: info.label,
+              agency_profile: info.agencyProfile ?? null,
               model: info.model,
               reasoning_effort: info.reasoningEffort,
               state: info.state,

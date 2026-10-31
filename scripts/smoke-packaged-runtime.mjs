@@ -37,6 +37,9 @@ const packageRoot = explicitRoot ? path.resolve(explicitRoot) : packageRootCandi
 if (!packageRoot) throw new Error(`Could not find unpacked ${targetPlatform}-${targetArch} package under ${releaseDir}`);
 
 const sourcePackage = JSON.parse(readFileSync(path.join(repository, 'package.json'), 'utf8'));
+// The packaged app's actual name is authoritative, including side-by-side forks.
+const builderConfig = readFileSync(path.join(repository, 'electron-builder.yml'), 'utf8');
+const packagedName = /^productName:\s*(.+)$/m.exec(builderConfig)?.[1]?.trim() || 'Chat On Steroids';
 const expectedVersion = sourcePackage.version;
 const expectedElectronVersion = sourcePackage.devDependencies?.electron;
 if (!/^\d+\.\d+\.\d+$/.test(expectedElectronVersion ?? '')) {
@@ -51,9 +54,9 @@ const nativeDir = `${targetPlatform}-${targetArch}`;
 let resourcesDir;
 let appExecutable;
 if (targetPlatform === 'darwin') {
-  const appBundle = path.join(packageRoot, 'Chat On Steroids.app');
+  const appBundle = path.join(packageRoot, `${packagedName}.app`);
   resourcesDir = path.join(appBundle, 'Contents', 'Resources');
-  appExecutable = path.join(appBundle, 'Contents', 'MacOS', 'Chat On Steroids');
+  appExecutable = path.join(appBundle, 'Contents', 'MacOS', packagedName);
 } else {
   resourcesDir = path.join(packageRoot, 'resources');
   appExecutable = path.join(packageRoot, targetPlatform === 'win32' ? 'Chat On Steroids.exe' : 'chat-on-steroids');

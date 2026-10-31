@@ -9,6 +9,7 @@ import { MAX_CHATGPT_MESSAGE_CHARS, prependUserPrompt } from '../../shared/user-
 import { selectedSkillInstructions, type SelectedSkill } from './skill-prompt.js';
 import { listSkillLibrary } from '../skill-library.js';
 import type { RoutedSkillSelection } from '../../shared/skill-routing.js';
+import { verifyAgencyProfileDirective } from '../agency-profile.js';
 
 type PromptScope = { sessionId?: string | null; projectId?: string | null; autoSkills?: readonly RoutedSkillSelection[];
   /** Verified broker-owned worker checkout; the selected project is only the source of instructions. */
@@ -131,6 +132,7 @@ export async function prepareSessionPrompt(text: string, scope: PromptScope = {}
   const library = await listSkillLibrary(scope.autoSkills !== undefined ? { ...skillScope, managedFromCatalog: true } : skillScope);
   const core = await currentCoreInstructions(library);
   const skills = await selectedSkillInstructions(authored, skillScope, library, scope.autoSkills);
+  verifyAgencyProfileDirective(authored, skills);
   fitSessionPrompt(text, core, null, budget, [], scope.workingDirectory); // Only Core/task overflow is mandatory.
   const agents = await projectInstructions(scope);
   if ((await promptFolder(scope))?.real !== folder?.real) throw new Error('The selected project changed during Skill preparation');

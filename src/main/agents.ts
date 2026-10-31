@@ -1770,7 +1770,8 @@ export function hasRetiredWorkerLeases(): boolean {
 
 export interface SpawnInput {
   /** `reviewer` only from the app's Goal step reviewer (#1832); the agents tool cannot set it. */
-  workers: ReadonlyArray<{ label?: string; task: string; model?: string | null; reasoning_effort?: string | null; reviewer?: boolean }>;
+  workers: ReadonlyArray<{ label?: string; task: string; model?: string | null; reasoning_effort?: string | null; reviewer?: boolean;
+    agencyDirective?: string; agencyProfile?: AgentInfo['agencyProfile'] }>;
   /**
    * What every worker in this spawn needs to know, written once.
    *
@@ -2190,7 +2191,10 @@ export function spawn(input: SpawnInput, options: SpawnOptions = {}): SpawnResul
     // the browser types, the repeated-spawn match, the status table, the snapshot — then
     // sees the same single string a worker actually receives, with no second field to keep
     // in step and no way for the two halves to be delivered apart.
-    return { label, task: briefFor(context, task), model, reasoningEffort, reviewer: worker.reviewer === true };
+    // Place the native Skill command before shared context; the prompt loader only
+    // accepts explicit commands at the beginning of the opening message.
+    return { label, task: worker.agencyDirective ? `${worker.agencyDirective}\n${briefFor(context, task)}` : briefFor(context, task),
+      model, reasoningEffort, reviewer: worker.reviewer === true, agencyProfile: worker.agencyProfile };
   });
 
   const conversationId = input.caller.conversationId ?? null;
@@ -2314,6 +2318,7 @@ export function spawn(input: SpawnInput, options: SpawnOptions = {}): SpawnResul
   for (const [index, worker] of planned.entries()) {
     const id = ids[index] as string;
     const agent = makeWorker(id, worker.label || id, worker.task, worker.model, worker.reasoningEffort);
+    if (worker.agencyProfile) agent.info.agencyProfile = worker.agencyProfile;
     agent.info.workerAllocationRunId = activeRun.runId;
     if (worker.reviewer) { agent.info.reviewer = true; agent.info.reviewAskedAt = Date.now(); }
     activeRun.agents.set(id, agent);
